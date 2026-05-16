@@ -4774,5 +4774,16 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbo
   await initAuth();
 })();
 </script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script>
+const SUPABASE_URL = "https://wvdapxlguxclatgqkqwn.supabase.co";
+
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind2ZGFweGxndXhjbGF0Z3FrcXduIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5Mjg3NzAsImV4cCI6MjA5NDUwNDc3MH0.KFepExK0aMtL0GGZAUnemk92ASi7PyrnC3MJ_KrQGvo";
+
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+console.log("Supabase connected:", supabaseClient);
+</script>
 </body>
 </html>
