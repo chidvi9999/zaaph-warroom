@@ -3279,7 +3279,7 @@ async function loadFromSupabase() {
   }));
 
   // Load trades
-  const tradeRows = await dbGet('zaaph_trades', `user_id=eq.${uid}`);
+  const tradeRows = await dbGet('trades', `user_id=eq.${uid}`);
   trades = tradeRows.map(r => ({
     id: r.id,
     acctId: r.account_id,
@@ -3389,77 +3389,127 @@ async function sbCreateAccount(acctData) {
 
 // Supabase trade create
 async function sbCreateTrade(t) {
-  const uid = currentUser.id;
-  const row = {
-    user_id: uid,
-    account_id: t.acctId,
-    pair: t.pair,
-    date: t.date,
-    time: t.time || null,
-    dir: t.dir,
-    session: t.session || null,
-    entry: t.entry || null,
-    exit_price: t.exit || null,
-    sl: t.sl || null,
-    tp: t.tp || null,
-    lots: t.lots || null,
-    pips: t.pips || null,
-    rr: t.rr || null,
-    pnl: t.pnl,
-    strategy: t.strategy || null,
-    condition: t.condition || null,
-    emotion: t.emotion || null,
-    plan: t.plan || 'yes',
-    rating: t.rating || 0,
-    notes: t.notes || null,
-    lesson: t.lesson || null
-    // photos are stored in localStorage to avoid row size limits
-  };
-  const result = await dbInsert('zaaph_trades', row);
-  // Save photos to localStorage keyed by trade DB id
-  if (result && t.photos && t.photos.length) {
-    try { localStorage.setItem('zaaph_photos_' + result.id, JSON.stringify(t.photos)); } catch(e) { console.warn('Photo localStorage save failed:', e); }
+  try {
+    const row = {
+      symbol: t.pair || null,
+      direction: t.dir || null,
+      session: t.session || null,
+
+      entry: t.entry || null,
+      stop_loss: t.sl || null,
+      take_profit: t.tp || null,
+      lot_size: t.lots || null,
+      risk_amount: null,
+      pnl: t.pnl || 0,
+
+      result: t.pnl > 0 ? 'Win' : t.pnl < 0 ? 'Loss' : 'Break Even',
+      emotion: t.emotion || null,
+      notes: t.notes || null,
+      lesson: t.lesson || null,
+
+      screenshots: t.photos || [],
+      trade_date: t.date || new Date().toISOString().slice(0, 10)
+    };
+
+    const res = await fetch(API + '/trades', {
+      method: 'POST',
+      headers: {
+        ...sbHeaders(),
+        'Prefer': 'return=representation'
+      },
+      body: JSON.stringify(row)
+    });
+
+    const text = await res.text();
+
+    if (!res.ok) {
+      console.error('Supabase save error:', res.status, text);
+      toast('⚠', 'Save failed: ' + text);
+      return null;
+    }
+
+    const data = JSON.parse(text);
+    console.log('Saved trade:', data[0]);
+
+    if (data[0] && t.photos && t.photos.length) {
+      try {
+        localStorage.setItem('zaaph_photos_' + data[0].id, JSON.stringify(t.photos));
+      } catch(e) {
+        console.warn('Photo localStorage save failed:', e);
+      }
+    }
+
+    return data[0];
+
+  } catch (err) {
+    console.error('Save trade error:', err);
+    toast('⚠', 'Save failed: ' + err.message);
+    return null;
   }
-  return result;
 }
 
 // Supabase trade update
 async function sbUpdateTrade(id, t) {
-  const row = {
-    pair: t.pair,
-    date: t.date,
-    time: t.time || null,
-    dir: t.dir,
-    session: t.session || null,
-    entry: t.entry || null,
-    exit_price: t.exit || null,
-    sl: t.sl || null,
-    tp: t.tp || null,
-    lots: t.lots || null,
-    pips: t.pips || null,
-    rr: t.rr || null,
-    pnl: t.pnl,
-    strategy: t.strategy || null,
-    condition: t.condition || null,
-    emotion: t.emotion || null,
-    plan: t.plan || 'yes',
-    rating: t.rating || 0,
-    notes: t.notes || null,
-    lesson: t.lesson || null
-    // photos are stored in localStorage to avoid row size limits
-  };
-  const result = await dbUpdate('zaaph_trades', id, row);
-  // Update photos in localStorage
-  if (result) {
-    try {
-      if (t.photos && t.photos.length) {
+  try {
+    const row = {
+      symbol: t.pair || null,
+      direction: t.dir || null,
+      session: t.session || null,
+
+      entry: t.entry || null,
+      stop_loss: t.sl || null,
+      take_profit: t.tp || null,
+      lot_size: t.lots || null,
+      risk_amount: null,
+      pnl: t.pnl || 0,
+
+      result: t.pnl > 0 ? 'Win' : t.pnl < 0 ? 'Loss' : 'Break Even',
+      emotion: t.emotion || null,
+      notes: t.notes || null,
+      lesson: t.lesson || null,
+
+      screenshots: t.photos || [],
+      trade_date: t.date || new Date().toISOString().slice(0, 10)
+    };
+
+    const res = await fetch(API + '/trades?id=eq.' + id, {
+      method: 'PATCH',
+      headers: {
+        ...sbHeaders(),
+        'Prefer': 'return=representation'
+      },
+      body: JSON.stringify(row)
+    });
+
+    const text = await res.text();
+
+    if (!res.ok) {
+      console.error('Supabase update error:', res.status, text);
+      toast('⚠', 'Update failed: ' + text);
+      return null;
+    }
+
+    const data = JSON.parse(text);
+
+    if (data[0] && t.photos && t.photos.length) {
+      try {
         localStorage.setItem('zaaph_photos_' + id, JSON.stringify(t.photos));
-      } else {
-        localStorage.removeItem('zaaph_photos_' + id);
+      } catch(e) {
+        console.warn('Photo localStorage update failed:', e);
       }
-    } catch(e) { console.warn('Photo localStorage update failed:', e); }
+    } else {
+      try {
+        localStorage.removeItem('zaaph_photos_' + id);
+      } catch(e) {}
+    }
+
+    return data[0];
+
+  } catch (err) {
+    console.error('Update trade error:', err);
+    toast('⚠', 'Update failed: ' + err.message);
+    return null;
   }
-  return result;
 }
 
 
@@ -3651,7 +3701,7 @@ async function deleteAccount(id) {
   if (accounts.length === 1) { toast('⚠','Cannot delete your last account'); return; }
   // Delete all trades for this account first
   const acctTrades = trades.filter(t => t.acctId === id);
-  for (const t of acctTrades) { await dbDelete('zaaph_trades', t.id); try { localStorage.removeItem('zaaph_photos_' + t.id); } catch(e) {} }
+  for (const t of acctTrades) { await dbDelete('trades', t.id); try { localStorage.removeItem('zaaph_photos_' + t.id); } catch(e) {} }
   await dbDelete('zaaph_accounts', id);
   accounts = accounts.filter(a => a.id !== id);
   trades = trades.filter(t => t.acctId !== id);
@@ -4089,7 +4139,7 @@ function renderLog() {
 }
 
 async function deleteTrade(id) {
-  await dbDelete('zaaph_trades', id);
+  await dbDelete('trades', id);
   try { localStorage.removeItem('zaaph_photos_' + id); } catch(e) {}
   trades=trades.filter(t=>t.id!==id);
   updateSidebar(); updatePills(); renderLog(); renderDashboard();
