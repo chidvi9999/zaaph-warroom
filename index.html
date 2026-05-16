@@ -3365,48 +3365,45 @@ async function loadFromSupabase() {
   // Set active account (first one if not set)
   if (accounts.length) activeAcct = accounts[0].id;
   } catch(e) { console.error('loadFromSupabase error:', e); }
-}
+
 
 // ── INIT ────────────────────────────────────────────────
 async function initAuth() {
-  const loadingEl = document.getElementById('authLoading');
   try {
-    const savedToken = sessionStorage.getItem('zaaph_token');
-    const savedUser  = sessionStorage.getItem('zaaph_user');
+    currentUser = {
+      id: 'public-user',
+      email: 'public@test.com'
+    };
 
-    if (savedToken && savedUser) {
-      accessToken  = savedToken;
-      currentUser  = JSON.parse(savedUser);
+    accessToken = null;
 
-      // Verify with a 5-second timeout so we never hang forever
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 5000);
-      try {
-        const r = await fetch(AUTH_API + '/user', {
-          headers: sbHeaders(),
-          signal: controller.signal
-        });
-        clearTimeout(timer);
-        if (r.ok) {
-          currentUser = await r.json();
-          loadingEl.style.display = 'none';
-          await bootApp();
-          return;
-        }
-      } catch (fetchErr) {
-        clearTimeout(timer);
-        // Network error or timeout — clear session, show login
-      }
-      // Token invalid or network failed — clear and show login
-      sessionStorage.removeItem('zaaph_token');
-      sessionStorage.removeItem('zaaph_user');
-      accessToken = null; currentUser = null;
-    }
+    const loadingEl = document.getElementById('authLoading');
+    if (loadingEl) loadingEl.style.display = 'none';
+
+    const authScreen = document.getElementById('authScreen');
+    if (authScreen) authScreen.style.display = 'none';
+
+    await bootApp();
+
   } catch (e) {
-    console.error('initAuth error:', e);
+    console.error('initAuth bypass error:', e);
+
+    const loadingEl = document.getElementById('authLoading');
+    if (loadingEl) loadingEl.style.display = 'none';
+
+    const authScreen = document.getElementById('authScreen');
+    if (authScreen) authScreen.style.display = 'none';
+
+    const appWrapper = document.getElementById('appWrapper');
+    if (appWrapper) appWrapper.style.display = 'flex';
+
+    const app = document.getElementById('app');
+    if (app) app.style.display = 'block';
+
+    if (typeof renderDashboard === 'function') renderDashboard();
+    if (typeof updateSidebar === 'function') updateSidebar();
+    if (typeof updatePills === 'function') updatePills();
   }
-  loadingEl.style.display = 'none';
-  showLogin();
 }
 
 
