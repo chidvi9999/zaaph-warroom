@@ -3264,47 +3264,103 @@ async function bootApp() {
 }
 
 async function loadFromSupabase() {
-  const uid = currentUser.id;
   try {
-  // Load accounts
-  const acctRows = await dbGet('zaaph_accounts', `user_id=eq.${uid}`);
-  accounts = acctRows.map(r => ({
-    id: r.id,
-    name: r.name,
-    type: r.type,
-    broker: r.broker || '',
-    balance: r.balance || 0,
-    currency: r.currency || 'USD',
-    created: r.created_at
-  }));
+    // Load accounts
+    const acctRows = await dbSelect('zaaph_accounts');
 
-  // Load trades
-  const tradeRows = await dbGet('trades', `user_id=eq.${uid}`);
-  trades = tradeRows.map(r => ({
-    id: r.id,
-    acctId: r.account_id,
-    pair: r.pair,
-    date: r.date,
-    time: r.time || '',
-    dir: r.dir,
-    session: r.session || '',
-    entry: r.entry,
-    exit: r.exit_price,
-    sl: r.sl,
-    tp: r.tp,
-    lots: r.lots,
-    pips: r.pips,
-    rr: r.rr,
-    pnl: r.pnl,
-    strategy: r.strategy || '',
-    condition: r.condition || '',
-    emotion: r.emotion || '',
-    plan: r.plan || 'yes',
-    rating: r.rating || 0,
-    notes: r.notes || '',
-    lesson: r.lesson || '',
-    photos: (() => { try { const p = localStorage.getItem('zaaph_photos_' + r.id); return p ? JSON.parse(p) : []; } catch(e) { return []; } })()
-  }));
+    accounts = (acctRows || []).map(a => ({
+      id: a.id,
+      name: a.name,
+      type: a.type,
+      broker: a.broker,
+      balance: a.balance,
+      currency: a.currency,
+      created: a.created_at
+    }));
+
+    // If no account exists, create one local default account
+    if (!accounts.length) {
+      accounts = [{
+        id: 'default-account',
+        name: 'Main Account',
+        type: 'live',
+        broker: '',
+        balance: 0,
+        currency: 'USD',
+        created: new Date().toISOString()
+      }];
+    }
+
+    activeAcct = accounts[0].id;
+
+    // Load trades from your working Supabase table: trades
+    const tradeRows = await dbSelect('trades');
+
+    trades = (tradeRows || []).map(r => {
+      let photos = [];
+
+      // First try Supabase screenshots column
+      if (Array.isArray(r.screenshots)) {
+        photos = r.screenshots;
+      }
+
+      // Then try localStorage backup
+      try {
+        const savedPhotos = localStorage.getItem('zaaph_photos_' + r.id);
+        if (savedPhotos) photos = JSON.parse(savedPhotos);
+      } catch(e) {}
+
+      return {
+        id: r.id,
+        acctId: activeAcct,
+
+        pair: r.symbol || '',
+        date: r.trade_date || '',
+        time: r.time || '',
+
+        dir: r.direction || 'BUY',
+        session: r.session || '',
+
+        entry: r.entry,
+        exit: r.exit_price || null,
+        sl: r.stop_loss,
+        tp: r.take_profit,
+        lots: r.lot_size,
+
+        pips: r.pips || null,
+        rr: r.rr || null,
+        pnl: r.pnl || 0,
+
+        strategy: r.strategy || '',
+        condition: r.condition || '',
+        emotion: r.emotion || '',
+        plan: r.plan || 'yes',
+        rating: r.rating || 0,
+
+        notes: r.notes || '',
+        lesson: r.lesson || '',
+
+        photos
+      };
+    });
+
+  } catch(e) {
+    console.error('loadFromSupabase error:', e);
+
+    if (!accounts.length) {
+      accounts = [{
+        id: 'default-account',
+        name: 'Main Account',
+        type: 'live',
+        broker: '',
+        balance: 0,
+        currency: 'USD',
+        created: new Date().toISOString()
+      }];
+      activeAcct = accounts[0].id;
+    }
+  }
+}
 
   // Set active account (first one if not set)
   if (accounts.length) activeAcct = accounts[0].id;
@@ -4174,46 +4230,63 @@ function closeEditModal() {
 }
 
 async function saveEditTrade() {
-  const id=parseInt(document.getElementById('eTradeId').value);
-  const idx=trades.findIndex(t=>t.id===id);
-  if (idx===-1) return;
-  const pnl=parseFloat(document.getElementById('ePnl').value);
-  if (isNaN(pnl)) { toast('⚠','P&L is required'); return; }
-  const pf = v => { const n=parseFloat(v); return isNaN(n)?null:n; };
-  trades[idx]={
-    ...trades[idx],
-    date:document.getElementById('eDate').value,
-    pair:document.getElementById('ePair').value,
-    dir:document.getElementById('eDir').value,
-    pnl,
-    entry:pf(document.getElementById('eEntry').value),
-    exit:pf(document.getElementById('eExit').value),
-    sl:pf(document.getElementById('eSL').value),
-    tp:pf(document.getElementById('eTP').value),
-    lots:pf(document.getElementById('eLots').value),
-    pips:pf(document.getElementById('ePips').value),
-    rr:pf(document.getElementById('eRR').value),
-    strategy:document.getElementById('eStrategy').value,
-    notes:document.getElementById('eNotes').value,
-    lesson:document.getElementById('eLesson').value,
-    photos:[...ePhotos],
-  };
-  await sbUpdateTrade(id, trades[idx]);
-  updateSidebar(); updatePills();
-  renderLog(); renderDashboard();
-  closeEditModal();
-  toast('💾','Trade updated successfully');
-}
+  const id = document.getElementById('eId').value;
+  const idx = trades.findIndex(t => String(t.id) === String(id));
+  if (idx === -1) {
+    toast('⚠', 'Trade not found');
+    return;
+  }
 
-document.getElementById('editModalOverlay').addEventListener('click', e => {
-  if (e.target===document.getElementById('editModalOverlay')) closeEditModal();
-});
-document.getElementById('editAcctModalOverlay').addEventListener('click', e => {
-  if (e.target===document.getElementById('editAcctModalOverlay')) closeEditAcctModal();
-});
-document.getElementById('delAcctConfirmOverlay').addEventListener('click', e => {
-  if (e.target===document.getElementById('delAcctConfirmOverlay')) closeDelAcctConfirm();
-});
+  const pair = document.getElementById('ePair').value;
+  const pnl = parseFloat(document.getElementById('ePnl').value);
+  const date = document.getElementById('eDate').value;
+
+  if (!pair || !date || isNaN(pnl)) {
+    toast('⚠', 'Fill required: Symbol, Date, P&L');
+    return;
+  }
+
+  const oldPhotos = trades[idx].photos || [];
+
+  const updated = {
+    ...trades[idx],
+    pair,
+    date,
+    time: document.getElementById('eTime') ? document.getElementById('eTime').value : trades[idx].time,
+    dir: document.getElementById('eDir') ? document.getElementById('eDir').value : trades[idx].dir,
+    session: document.getElementById('eSession') ? document.getElementById('eSession').value : trades[idx].session,
+
+    entry: parseFloat(document.getElementById('eEntry').value) || null,
+    exit: document.getElementById('eExit') ? parseFloat(document.getElementById('eExit').value) || null : trades[idx].exit,
+    sl: parseFloat(document.getElementById('eSL').value) || null,
+    tp: parseFloat(document.getElementById('eTP').value) || null,
+    lots: parseFloat(document.getElementById('eLots').value) || null,
+
+    pnl,
+    notes: document.getElementById('eNotes') ? document.getElementById('eNotes').value : trades[idx].notes,
+    lesson: document.getElementById('eLesson') ? document.getElementById('eLesson').value : trades[idx].lesson,
+
+    photos: oldPhotos
+  };
+
+  const result = await sbUpdateTrade(id, updated);
+
+  if (!result) {
+    toast('⚠', 'Failed to update trade');
+    return;
+  }
+
+  trades[idx] = updated;
+
+  updateSidebar();
+  updatePills();
+
+  if (typeof renderDashboard === 'function') renderDashboard();
+  if (typeof closeEditTradeModal === 'function') closeEditTradeModal();
+  if (typeof closeTradeDetail === 'function') closeTradeDetail();
+
+  toast('✓', 'Trade updated');
+}
 
 // ═══════════ ANALYTICS ═══════════
 function renderAnalytics() {
@@ -4741,15 +4814,27 @@ document.addEventListener('keydown', e => {
 let fPhotos = [];   // [{name, dataUrl}] for log form
 let ePhotos = [];   // for edit modal
 
-function renderPhotoGrid(photos, gridId, removeFn) {
+function renderPhotoGrid(photos, gridId, removeFnName) {
   const grid = document.getElementById(gridId);
   if (!grid) return;
-  grid.innerHTML = photos.map((p, i) => `
-    <div class="photo-thumb" onclick="openLightbox('${p.dataUrl}','${p.name.replace(/'/g,"\'")}')">
-      <img src="${p.dataUrl}" alt="${p.name}">
-      <div class="photo-thumb-label">${p.name}</div>
-      <button class="photo-remove" onclick="event.stopPropagation();${removeFn}(${i})" title="Remove">✕</button>
-    </div>`).join('');
+
+  grid.innerHTML = '';
+
+  if (!photos || !photos.length) {
+    return;
+  }
+
+  photos.forEach((src, i) => {
+    const div = document.createElement('div');
+    div.className = 'photo-thumb';
+
+    div.innerHTML = `
+      <img src="${src}" alt="Trade screenshot">
+      ${removeFnName ? `<button type="button" onclick="${removeFnName}(${i})">×</button>` : ''}
+    `;
+
+    grid.appendChild(div);
+  });
 }
 
 function readFilesAsDataUrls(files, callback) {
