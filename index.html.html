@@ -2981,8 +2981,8 @@ let accessToken = null;
 
 const sbHeaders = (extra = {}) => ({
   'apikey': SUPABASE_ANON_KEY,
+  'Authorization': 'Bearer ' + (accessToken || SUPABASE_ANON_KEY),
   'Content-Type': 'application/json',
-  ...(accessToken ? { 'Authorization': 'Bearer ' + accessToken } : {}),
   ...extra
 });
 
@@ -3389,38 +3389,63 @@ async function sbCreateAccount(acctData) {
 
 // Supabase trade create
 async function sbCreateTrade(t) {
-  const uid = currentUser.id;
-  const row = {
-    user_id: uid,
-    account_id: t.acctId,
-    pair: t.pair,
-    date: t.date,
-    time: t.time || null,
-    dir: t.dir,
-    session: t.session || null,
-    entry: t.entry || null,
-    exit_price: t.exit || null,
-    sl: t.sl || null,
-    tp: t.tp || null,
-    lots: t.lots || null,
-    pips: t.pips || null,
-    rr: t.rr || null,
-    pnl: t.pnl,
-    strategy: t.strategy || null,
-    condition: t.condition || null,
-    emotion: t.emotion || null,
-    plan: t.plan || 'yes',
-    rating: t.rating || 0,
-    notes: t.notes || null,
-    lesson: t.lesson || null
-    // photos are stored in localStorage to avoid row size limits
-  };
-  const result = await dbInsert('zaaph_trades', row);
-  // Save photos to localStorage keyed by trade DB id
-  if (result && t.photos && t.photos.length) {
-    try { localStorage.setItem('zaaph_photos_' + result.id, JSON.stringify(t.photos)); } catch(e) { console.warn('Photo localStorage save failed:', e); }
+  try {
+    const row = {
+      symbol: t.pair || null,
+      direction: t.dir || null,
+      session: t.session || null,
+
+      entry: t.entry || null,
+      stop_loss: t.sl || null,
+      take_profit: t.tp || null,
+      lot_size: t.lots || null,
+      risk_amount: null,
+      pnl: t.pnl || 0,
+
+      result: t.pnl > 0 ? 'Win' : t.pnl < 0 ? 'Loss' : 'Break Even',
+      emotion: t.emotion || null,
+      notes: t.notes || null,
+      lesson: t.lesson || null,
+
+      screenshots: t.photos || [],
+      trade_date: t.date || new Date().toISOString().slice(0, 10)
+    };
+
+    const res = await fetch(API + '/trades', {
+      method: 'POST',
+      headers: {
+        ...sbHeaders(),
+        'Prefer': 'return=representation'
+      },
+      body: JSON.stringify(row)
+    });
+
+    const text = await res.text();
+
+    if (!res.ok) {
+      console.error('Supabase save error:', res.status, text);
+      toast('⚠', 'Save failed: ' + text);
+      return null;
+    }
+
+    const data = JSON.parse(text);
+    console.log('Saved trade:', data[0]);
+
+    if (data[0] && t.photos && t.photos.length) {
+      try {
+        localStorage.setItem('zaaph_photos_' + data[0].id, JSON.stringify(t.photos));
+      } catch(e) {
+        console.warn('Photo localStorage save failed:', e);
+      }
+    }
+
+    return data[0];
+
+  } catch (err) {
+    console.error('Save trade error:', err);
+    toast('⚠', 'Save failed: ' + err.message);
+    return null;
   }
-  return result;
 }
 
 // Supabase trade update
