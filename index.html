@@ -3364,7 +3364,24 @@ async function loadFromSupabase() {
 
   // Set active account (first one if not set)
   if (accounts.length) activeAcct = accounts[0].id;
-  } catch(e) { console.error('loadFromSupabase error:', e); }
+  } catch(e) { console.error('loadFromSupabase error:', e); 
+               } catch(e) {
+    console.error('loadFromSupabase error:', e);
+
+    if (!accounts.length) {
+      accounts = [{
+        id: 'default-account',
+        name: 'Main Account',
+        type: 'live',
+        broker: '',
+        balance: 0,
+        currency: 'USD',
+        created: new Date().toISOString()
+      }];
+      activeAcct = accounts[0].id;
+    }
+  }
+}
 
 
 // ── INIT ────────────────────────────────────────────────
