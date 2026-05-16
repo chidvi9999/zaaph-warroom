@@ -3293,18 +3293,16 @@ async function loadFromSupabase() {
 
     activeAcct = accounts[0].id;
 
-    // Load trades from your working Supabase table: trades
+    // Load trades from Supabase table: trades
     const tradeRows = await dbSelect('trades');
 
     trades = (tradeRows || []).map(r => {
       let photos = [];
 
-      // First try Supabase screenshots column
       if (Array.isArray(r.screenshots)) {
         photos = r.screenshots;
       }
 
-      // Then try localStorage backup
       try {
         const savedPhotos = localStorage.getItem('zaaph_photos_' + r.id);
         if (savedPhotos) photos = JSON.parse(savedPhotos);
@@ -3347,39 +3345,18 @@ async function loadFromSupabase() {
   } catch(e) {
     console.error('loadFromSupabase error:', e);
 
-    if (!accounts.length) {
-      accounts = [{
-        id: 'default-account',
-        name: 'Main Account',
-        type: 'live',
-        broker: '',
-        balance: 0,
-        currency: 'USD',
-        created: new Date().toISOString()
-      }];
-      activeAcct = accounts[0].id;
-    }
-  }
-}
+    accounts = [{
+      id: 'default-account',
+      name: 'Main Account',
+      type: 'live',
+      broker: '',
+      balance: 0,
+      currency: 'USD',
+      created: new Date().toISOString()
+    }];
 
-  // Set active account (first one if not set)
-  if (accounts.length) activeAcct = accounts[0].id;
-  } catch(e) { console.error('loadFromSupabase error:', e); 
-               } catch(e) {
-    console.error('loadFromSupabase error:', e);
-
-    if (!accounts.length) {
-      accounts = [{
-        id: 'default-account',
-        name: 'Main Account',
-        type: 'live',
-        broker: '',
-        balance: 0,
-        currency: 'USD',
-        created: new Date().toISOString()
-      }];
-      activeAcct = accounts[0].id;
-    }
+    activeAcct = accounts[0].id;
+    trades = [];
   }
 }
 
